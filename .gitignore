@@ -1,0 +1,31 @@
+# Virtual environment
+venv/
+venv_*/
+env/
+.env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Inference results
+inference_results.json
+*.pyc
