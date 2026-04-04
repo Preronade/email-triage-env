@@ -29,3 +29,8 @@ Thumbs.db
 # Inference results
 inference_results.json
 *.pyc
+venv/
+venv_*/
+__pycache__/
+*.pyc
+*.so
