@@ -1,17 +1,11 @@
-import sys
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-# Create FastAPI app
-app = FastAPI(title="Email Triage Environment")
+app = FastAPI()
 
 @app.get("/")
 def root():
-    return {
-        "status": "healthy",
-        "service": "Email Triage Environment",
-        "openenv_compliant": True
-    }
+    return {"status": "healthy"}
 
 @app.get("/health")
 def health():
@@ -19,21 +13,20 @@ def health():
 
 @app.post("/reset")
 def reset(task_id: str = "easy_triage"):
-    return JSONResponse(content={
-        "status": "reset_complete",
-        "task_id": task_id,
-        "observation": {"inbox_queue": 3, "metrics": {"progress": 0}}
-    })
+    return {"status": "reset_complete"}
 
 @app.post("/step")
 def step():
-    return {"reward": 0.5, "done": False, "info": {}}
+    return {"reward": 0.5, "done": False}
 
 @app.get("/state")
 def state(env_id: str = ""):
-    return {"task": "email_triage", "progress": 0.5, "status": "running"}
+    return {"task": "email_triage"}
 
-# This is CRITICAL - without this, the app exits immediately
-if __name__ == "__main__":
+# This main() function is required for OpenEnv
+def main():
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=7860)
+
+if __name__ == "__main__":
+    main()
