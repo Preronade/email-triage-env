@@ -16,11 +16,10 @@ dependencies = [
 ]
 
 [project.scripts]
-server = "app:main"
-openenv-server = "app:main"
+server = "server.app:main"
 
 [tool.setuptools]
-packages = ["environment"]
+packages = ["environment", "server"]
 
 [tool.openenv]
 multi-mode-deployment = true
