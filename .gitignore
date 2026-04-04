@@ -1,36 +1,30 @@
-# Virtual environment
+# Virtual environments
 venv/
 venv_*/
 env/
-.env/
+ENV/
+.venv/
 
 # Python cache
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
+*.abi3.so
 
-# IDE files
+# Large JS files
+*.js.map
+*.js
+
+# IDE
 .vscode/
 .idea/
 *.swp
-*.swo
-
-# Logs and databases
-*.log
-*.sqlite
-*.db
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# Inference results
-inference_results.json
-*.pyc
-venv/
-venv_*/
-__pycache__/
-*.pyc
-*.so
+# Logs
+*.log
+*.sqlite
