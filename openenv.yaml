@@ -1,0 +1,55 @@
+name: email-triage-env
+version: 1.0.0
+description: Email triage assistant - prioritize and categorize executive emails
+author: AI Agent Systems
+license: MIT
+
+observation_space:
+  type: structured
+  schema:
+    current_email:
+      id: string
+      from: string
+      subject: string
+      body: string
+      priority_hints: list[string]
+    inbox_queue: integer
+    actions_taken: list[dict]
+    metrics:
+      urgency_score: float
+      importance_score: float
+
+action_space:
+  type: discrete_with_parameters
+  actions:
+    - prioritize_high
+    - prioritize_normal
+    - prioritize_low
+    - categorize_urgent
+    - categorize_regular
+    - categorize_informational
+    - delegate
+    - archive
+    - request_info
+
+reward_range: [0.0, 1.0]
+max_episode_steps: 50
+
+tasks:
+  - id: easy_triage
+    name: Basic Priority Classification
+    difficulty: easy
+    
+  - id: medium_triage
+    name: Multi-constraint Optimization
+    difficulty: medium
+    
+  - id: hard_triage
+    name: Complex Stakeholder Management
+    difficulty: hard
+
+tags:
+  - email
+  - triage
+  - productivity
+  - real-world
