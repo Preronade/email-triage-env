@@ -1,116 +1,102 @@
 #!/usr/bin/env python3
 """
-Email Triage Inference - COMPLETELY FREE (No API calls)
-Uses intelligent rules instead of paid LLM APIs
+Email Triage Inference with LiteLLM Proxy
+Uses the evaluator's API_BASE_URL and API_KEY - NO personal keys needed
 """
 
 import os
 import sys
 import json
-import random
+import time
 from datetime import datetime
+import openai
 
-# Load environment variables (optional, not required for free version)
-API_BASE_URL = os.getenv("API_BASE_URL", "mock://free-local")
-MODEL_NAME = os.getenv("MODEL_NAME", "rule-based-agent")
-HF_TOKEN = os.getenv("HF_TOKEN", "free-token-not-needed")
-
+# Add project root to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from environment.core import EmailTriageEnv
 
-class FreeRuleBasedAgent:
-    """100% FREE agent - No API calls, No payments, No external services"""
+# ============================================
+# CRITICAL: Use the evaluator's environment variables
+# DO NOT hardcode any API keys here!
+# ============================================
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://litellm-proxy:4000")
+API_KEY = os.environ.get("API_KEY", os.environ.get("OPENAI_API_KEY", "dummy-key"))
+
+# Initialize OpenAI client with the proxy
+client = openai.OpenAI(
+    base_url=API_BASE_URL,
+    api_key=API_KEY,
+)
+
+class LiteLLMAgent:
+    """Agent that makes REAL LLM calls through the provided proxy"""
     
     def __init__(self):
         self.total_calls = 0
-        self.decision_log = []
-    
+        self.total_tokens = 0
+        
     def get_action(self, observation, task_name: str):
-        """Intelligent rule-based decision making - COMPLETELY FREE"""
+        """Call LLM through LiteLLM proxy to decide action"""
         
         email = observation.current_email
-        urgency = observation.metrics.get('urgency_score', 0)
-        importance = observation.metrics.get('importance_score', 0)
-        subject_lower = email.subject.lower()
-        body_lower = email.body.lower()
-        from_lower = email.from_address.lower()
         
-        self.total_calls += 1
+        # Build prompt
+        system_prompt = """You are an executive assistant managing email triage.
+Output a JSON object with: {"type": "action_name", "reasoning": "your reasoning", "confidence": 0.0-1.0}
+Actions: prioritize_high, prioritize_normal, prioritize_low, categorize_urgent, 
+categorize_regular, categorize_informational, delegate, archive, request_info"""
         
-        # Sophisticated rule engine (no API needed!)
+        user_prompt = f"""Task: {task_name}
+From: {email.from_address}
+Subject: {email.subject}
+Body: {email.body[:500]}
+Urgency: {observation.metrics.get('urgency_score', 0):.2f}
+Importance: {observation.metrics.get('importance_score', 0):.2f}
+Queue: {observation.inbox_queue} remaining
+
+Choose the best action:"""
         
-        # Rule 1: CEO or executive emails = HIGH priority
-        exec_keywords = ['ceo', 'president', 'vp', 'director', 'founder', 'owner']
-        if any(word in from_lower for word in exec_keywords):
-            action = "prioritize_high"
-            reasoning = "Executive sender requires immediate attention"
-            confidence = 0.95
-        
-        # Rule 2: Urgent keywords detection
-        elif any(word in subject_lower or word in body_lower 
-                for word in ['urgent', 'asap', 'deadline', 'critical', 'emergency']):
-            action = "categorize_urgent"
-            reasoning = "Time-sensitive content detected"
-            confidence = 0.9
-        
-        # Rule 3: High urgency + high importance
-        elif urgency > 0.6 and importance > 0.5:
-            action = "prioritize_high"
-            reasoning = "High urgency and importance metrics"
-            confidence = 0.85
-        
-        # Rule 4: Team coordination = delegate
-        elif any(word in body_lower for word in ['team', 'department', 'committee', 'group']):
-            action = "delegate"
-            reasoning = "Requires team coordination"
-            confidence = 0.8
-        
-        # Rule 5: Ambiguous requests = ask for info
-        elif any(word in body_lower for word in ['maybe', 'perhaps', 'consider', 'thoughts?', 'opinion']):
-            action = "request_info"
-            reasoning = "Ambiguous request needs clarification"
-            confidence = 0.75
-        
-        # Rule 6: Newsletters/automated = low priority
-        elif any(word in from_lower or word in subject_lower 
-                for word in ['newsletter', 'digest', 'noreply', 'automated', 'weekly']):
-            action = "prioritize_low"
-            reasoning = "Automated or newsletter content"
-            confidence = 0.9
-        
-        # Rule 7: Normal priority default
-        else:
-            action = "prioritize_normal"
-            reasoning = "Standard priority based on routine content"
-            confidence = 0.7
-        
-        # Record decision
-        decision = {
-            "type": action,
-            "reasoning": reasoning,
-            "confidence": confidence,
-            "urgency_score": urgency,
-            "importance_score": importance
-        }
-        self.decision_log.append(decision)
-        
-        return decision
+        try:
+            # Make ACTUAL LLM call through the proxy
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",  # The proxy will map this
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=150,
+                response_format={"type": "json_object"}
+            )
+            
+            self.total_calls += 1
+            if response.usage:
+                self.total_tokens += response.usage.total_tokens
+            
+            action = json.loads(response.choices[0].message.content)
+            return action
+            
+        except Exception as e:
+            print(f"[WARNING] LLM call failed: {e}")
+            # Fallback action (should not happen in evaluation)
+            return {"type": "prioritize_normal", "reasoning": "Fallback", "confidence": 0.5}
     
     def get_stats(self):
         return {
             "total_calls": self.total_calls,
-            "model": "rule-based-free",
-            "api_calls": 0,  # ZERO API calls!
-            "cost": "$0.00"  # COMPLETELY FREE!
+            "total_tokens": self.total_tokens,
+            "model": "gpt-3.5-turbo",
+            "api_base": API_BASE_URL
         }
 
 def run_task(task_id: str, episodes: int = 2) -> dict:
-    """Run inference on a single task with FREE agent"""
+    """Run inference on a single task with real LLM calls"""
     
     print(f"[START] Task: {task_id}")
     
     env = EmailTriageEnv(task_id=task_id)
-    agent = FreeRuleBasedAgent()
+    agent = LiteLLMAgent()
     
     episode_scores = []
     
@@ -121,20 +107,31 @@ def run_task(task_id: str, episodes: int = 2) -> dict:
         done = False
         total_reward = 0
         step_count = 0
+        actions_log = []
         
         while not done:
+            # Each action decision uses a REAL LLM call through the proxy
             action = agent.get_action(obs, env.task.name)
             obs, reward, done, info = env.step(action)
             total_reward += reward
             step_count += 1
             
-            print(f"[STEP] Step {step_count}: {action['type']} -> Reward: {reward:.3f}")
-            print(f"[STEP] Reasoning: {action['reasoning']}")
+            actions_log.append({
+                "step": step_count,
+                "action": action.get('type'),
+                "reward": round(reward, 3),
+                "confidence": action.get('confidence', 0)
+            })
+            
+            print(f"[STEP] Step {step_count}: {action.get('type')} -> Reward: {reward:.3f}")
+            print(f"[STEP] Reasoning: {action.get('reasoning', 'No reasoning')}")
         
         final_score = env.task.compute_final_score(env.actions_taken)
         episode_scores.append(final_score)
         
-        print(f"[STEP] Episode {episode + 1} Complete - Final Score: {final_score:.3f}")
+        print(f"[STEP] Episode {episode + 1} Complete - Score: {final_score:.3f}")
+        print(f"[STEP] Total LLM calls: {agent.total_calls}")
+        print(f"[STEP] Total tokens used: {agent.total_tokens}")
     
     avg_score = sum(episode_scores) / len(episode_scores)
     
@@ -149,17 +146,17 @@ def run_task(task_id: str, episodes: int = 2) -> dict:
     }
     
     print(f"[END] Task: {task_id} | Average Score: {avg_score:.3f}")
+    print(f"[END] LLM Calls: {agent.total_calls} | Tokens: {agent.total_tokens}")
     
     return result
 
 def main():
-    """Main inference entry point - COMPLETELY FREE"""
+    """Main inference entry point - uses LiteLLM proxy"""
     
-    print("[START] Email Triage Inference - FREE Version")
-    print("[STEP] Agent: Rule-based (No API calls, No payments)")
-    print("[STEP] Model: FREE-RULE-BASED-AGENT")
-    print("[STEP] API Base: MOCK-FREE-LOCAL")
-    print("[STEP] Cost per run: $0.00")
+    print("[START] Email Triage Inference - LiteLLM Proxy Mode")
+    print(f"[STEP] API Base URL: {API_BASE_URL}")
+    print(f"[STEP] Model: gpt-3.5-turbo (via proxy)")
+    print("[STEP] Making REAL LLM calls through evaluator's proxy")
     
     tasks = ["easy_triage", "medium_triage", "hard_triage"]
     all_results = []
@@ -179,28 +176,31 @@ def main():
     # Final summary
     print("\n[START] Final Summary")
     total_score = 0
+    total_llm_calls = 0
     for result in all_results:
         score = result.get('average_score', 0)
         total_score += score
-        print(f"[STEP] {result['task']}: {score:.3f}")
+        stats = result.get('agent_stats', {})
+        total_llm_calls += stats.get('total_calls', 0)
+        print(f"[STEP] {result['task']}: {score:.3f} ({stats.get('total_calls', 0)} LLM calls)")
     
     overall_score = total_score / len(tasks)
     print(f"[END] Overall Score: {overall_score:.3f}")
-    print(f"[END] Total Cost: $0.00 (FREE!)")
+    print(f"[END] Total LLM Calls: {total_llm_calls}")
+    print("[END] Inference Complete - Used LiteLLM Proxy!")
     
     # Output results
     summary = {
         "overall_score": overall_score,
         "tasks": all_results,
         "timestamp": datetime.now().isoformat(),
-        "cost_usd": 0.00,
-        "api_calls": 0
+        "total_llm_calls": total_llm_calls,
+        "api_base_url": API_BASE_URL
     }
     
     with open("inference_results.json", "w") as f:
         json.dump(summary, f, indent=2)
     
-    print("[END] Inference Complete - 100% FREE!")
     return summary
 
 if __name__ == "__main__":
