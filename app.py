@@ -33,6 +33,14 @@ class ActionRequest(BaseModel):
     action: Dict[str, Any]
     env_id: Optional[str] = None
 
+# ============================================
+# FIX: Clamp scores to strictly (0, 1)
+# ============================================
+def clamp_score(score: float) -> float:
+    """Score must be strictly between 0 and 1, never 0.0 or 1.0"""
+    epsilon = 1e-6
+    return max(epsilon, min(1.0 - epsilon, float(score)))
+
 def get_llm_action(email_subject, email_body, urgency, importance):
     """Make REAL LLM call through LiteLLM proxy"""
     
@@ -107,7 +115,7 @@ def step_action(request: ActionRequest):
     env_id = request.action.get('env_id') or request.env_id
     
     if not env_id or env_id not in environments:
-        return {"reward": 0.0, "done": True, "info": {"error": "Environment not found"}}
+        return {"reward": clamp_score(0.0), "done": True, "info": {"error": "Environment not found"}}
     
     env = environments[env_id]
     obs = env._get_observation()
@@ -132,7 +140,7 @@ def step_action(request: ActionRequest):
             "inbox_queue": observation.inbox_queue,
             "metrics": observation.metrics
         },
-        "reward": reward,
+        "reward": clamp_score(reward),   # FIX: clamped
         "done": done,
         "info": info
     }

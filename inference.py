@@ -29,6 +29,14 @@ client = openai.OpenAI(
     api_key=API_KEY,
 )
 
+# ============================================
+# FIX: Clamp scores to strictly (0, 1)
+# ============================================
+def clamp_score(score: float) -> float:
+    """Score must be strictly between 0 and 1, never 0.0 or 1.0"""
+    epsilon = 1e-6
+    return max(epsilon, min(1.0 - epsilon, float(score)))
+
 class LiteLLMAgent:
     """Agent that makes REAL LLM calls through the provided proxy"""
     
@@ -41,7 +49,6 @@ class LiteLLMAgent:
         
         email = observation.current_email
         
-        # Build prompt
         system_prompt = """You are an executive assistant managing email triage.
 Output a JSON object with: {"type": "action_name", "reasoning": "your reasoning", "confidence": 0.0-1.0}
 Actions: prioritize_high, prioritize_normal, prioritize_low, categorize_urgent, 
@@ -58,9 +65,8 @@ Queue: {observation.inbox_queue} remaining
 Choose the best action:"""
         
         try:
-            # Make ACTUAL LLM call through the proxy
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",  # The proxy will map this
+                model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -79,7 +85,6 @@ Choose the best action:"""
             
         except Exception as e:
             print(f"[WARNING] LLM call failed: {e}")
-            # Fallback action (should not happen in evaluation)
             return {"type": "prioritize_normal", "reasoning": "Fallback", "confidence": 0.5}
     
     def get_stats(self):
@@ -110,7 +115,6 @@ def run_task(task_id: str, episodes: int = 2) -> dict:
         actions_log = []
         
         while not done:
-            # Each action decision uses a REAL LLM call through the proxy
             action = agent.get_action(obs, env.task.name)
             obs, reward, done, info = env.step(action)
             total_reward += reward
@@ -119,21 +123,24 @@ def run_task(task_id: str, episodes: int = 2) -> dict:
             actions_log.append({
                 "step": step_count,
                 "action": action.get('type'),
-                "reward": round(reward, 3),
+                "reward": round(clamp_score(reward), 6),  # FIX: clamped
                 "confidence": action.get('confidence', 0)
             })
             
             print(f"[STEP] Step {step_count}: {action.get('type')} -> Reward: {reward:.3f}")
             print(f"[STEP] Reasoning: {action.get('reasoning', 'No reasoning')}")
         
-        final_score = env.task.compute_final_score(env.actions_taken)
+        # FIX: clamp final score
+        raw_score = env.task.compute_final_score(env.actions_taken)
+        final_score = clamp_score(raw_score)
         episode_scores.append(final_score)
         
-        print(f"[STEP] Episode {episode + 1} Complete - Score: {final_score:.3f}")
+        print(f"[STEP] Episode {episode + 1} Complete - Score: {final_score:.6f}")
         print(f"[STEP] Total LLM calls: {agent.total_calls}")
         print(f"[STEP] Total tokens used: {agent.total_tokens}")
     
-    avg_score = sum(episode_scores) / len(episode_scores)
+    # FIX: clamp average score too
+    avg_score = clamp_score(sum(episode_scores) / len(episode_scores))
     
     result = {
         "task": task_id,
@@ -141,11 +148,11 @@ def run_task(task_id: str, episodes: int = 2) -> dict:
         "difficulty": env.task.difficulty,
         "episodes": episodes,
         "scores": episode_scores,
-        "average_score": round(avg_score, 3),
+        "average_score": round(avg_score, 6),  # FIX: more precision
         "agent_stats": agent.get_stats()
     }
     
-    print(f"[END] Task: {task_id} | Average Score: {avg_score:.3f}")
+    print(f"[END] Task: {task_id} | Average Score: {avg_score:.6f}")
     print(f"[END] LLM Calls: {agent.total_calls} | Tokens: {agent.total_tokens}")
     
     return result
@@ -170,26 +177,25 @@ def main():
             all_results.append({
                 "task": task,
                 "error": str(e),
-                "average_score": 0.0
+                "average_score": clamp_score(0.0)  # FIX: clamped even in error case
             })
     
-    # Final summary
     print("\n[START] Final Summary")
     total_score = 0
     total_llm_calls = 0
     for result in all_results:
-        score = result.get('average_score', 0)
+        score = result.get('average_score', clamp_score(0.0))
         total_score += score
         stats = result.get('agent_stats', {})
         total_llm_calls += stats.get('total_calls', 0)
-        print(f"[STEP] {result['task']}: {score:.3f} ({stats.get('total_calls', 0)} LLM calls)")
+        print(f"[STEP] {result['task']}: {score:.6f} ({stats.get('total_calls', 0)} LLM calls)")
     
-    overall_score = total_score / len(tasks)
-    print(f"[END] Overall Score: {overall_score:.3f}")
+    # FIX: clamp overall score
+    overall_score = clamp_score(total_score / len(tasks))
+    print(f"[END] Overall Score: {overall_score:.6f}")
     print(f"[END] Total LLM Calls: {total_llm_calls}")
     print("[END] Inference Complete - Used LiteLLM Proxy!")
     
-    # Output results
     summary = {
         "overall_score": overall_score,
         "tasks": all_results,
