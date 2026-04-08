@@ -1,6 +1,11 @@
 from typing import Dict, List, Any, Tuple
 from dataclasses import dataclass
 
+def clamp_score(score: float) -> float:
+    """Score must be strictly between 0 and 1, never 0.0 or 1.0"""
+    epsilon = 1e-6
+    return max(epsilon, min(1.0 - epsilon, float(score)))
+
 @dataclass
 class Task:
     name: str
@@ -78,19 +83,20 @@ class EasyTriageTask(Task):
     
     def compute_final_score(self, actions_taken: List[Dict]) -> float:
         if not actions_taken:
-            return 0.0
+            return clamp_score(0.0)  # FIX: was 0.0
             
         accuracy_score = sum(1 for a in actions_taken 
                            if self.grade_action(a['type'], a) > 0.5) / len(actions_taken)
         
-        efficiency_score = min(1.0, len(actions_taken) / (len(self.emails) * 2))
+        efficiency_score = min(1.0 - 1e-6, len(actions_taken) / (len(self.emails) * 2))  # FIX: can't hit 1.0
         consistency_score = 0.9
         
         final = (self.weights["accuracy"] * accuracy_score +
                 self.weights["efficiency"] * efficiency_score +
                 self.weights["consistency"] * consistency_score)
         
-        return final
+        return clamp_score(final)  # FIX: clamp final
+
 
 class MediumTriageTask(Task):
     def __init__(self):
@@ -150,23 +156,24 @@ class MediumTriageTask(Task):
         if "categorize_urgent" in action and time_sensitivity > 0.8:
             score += 0.3
             
-        return min(1.0, score)
+        return clamp_score(score)  # FIX: was min(1.0, score) which can hit 1.0
     
     def compute_final_score(self, actions_taken: List[Dict]) -> float:
         if len(actions_taken) < len(self.emails):
-            return 0.3
+            return clamp_score(0.3)  # FIX: was 0.3 (safe but clamp for consistency)
         
         accuracy = sum(self.grade_action(a['type'], a) for a in actions_taken) / len(actions_taken)
         time_spent = len(actions_taken) * 0.1
-        time_score = max(0, 1.0 - time_spent)
+        time_score = max(1e-6, 1.0 - time_spent)  # FIX: can't hit 0.0
         delegation_actions = [a for a in actions_taken if a['type'] == 'delegate']
-        delegation_score = min(1.0, len(delegation_actions) / 2)
+        delegation_score = min(1.0 - 1e-6, len(delegation_actions) / 2)  # FIX: can't hit 1.0
         
         final = (self.weights["accuracy"] * accuracy +
                 self.weights["time_management"] * time_score +
                 self.weights["delegation"] * delegation_score)
         
-        return final
+        return clamp_score(final)  # FIX: clamp final
+
 
 class HardTriageTask(Task):
     def __init__(self):
@@ -224,18 +231,19 @@ class HardTriageTask(Task):
         if "prioritize_high" in action and email.get("deadline_days", 10) < 2:
             score += 0.2
             
-        return score
+        return clamp_score(score)  # FIX: clamp
     
     def compute_final_score(self, actions_taken: List[Dict]) -> float:
         if len(actions_taken) < len(self.emails):
-            return 0.2
+            return clamp_score(0.2)  # FIX: was 0.2 (safe but clamp for consistency)
         
         stakeholder_score = 0.7
         accuracy_score = sum(self.grade_action(a['type'], a) for a in actions_taken) / len(actions_taken)
-        communication_score = min(1.0, len([a for a in actions_taken if a.get('reasoning')]) / len(actions_taken))
+        communication_score = min(1.0 - 1e-6,  # FIX: can't hit 1.0
+                                  len([a for a in actions_taken if a.get('reasoning')]) / len(actions_taken))
         
         final = (self.weights["stakeholder_satisfaction"] * stakeholder_score +
                 self.weights["accuracy"] * accuracy_score +
                 self.weights["communication"] * communication_score)
         
-        return final
+        return clamp_score(final)  # FIX: clamp final
